@@ -1,3 +1,4 @@
+import { Brand } from "@/components/brand";
 import Link from "next/link";
 export default function NotFound() {
   return (
@@ -7,7 +8,7 @@ export default function NotFound() {
           className="auth-mini-brand"
           style={{ display: "block", marginBottom: 25 }}
         >
-          Arionys CDN
+          <Brand />
         </span>
         <h1>This page isn’t here.</h1>
         <p>

@@ -1,6 +1,8 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { optionalAccount } from "@/lib/page-auth";
 import { AuthPage } from "@/components/auth-page";
+export const metadata: Metadata = { title: "Create an account" };
 export default async function Page({
   searchParams,
 }: {

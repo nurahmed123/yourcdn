@@ -253,8 +253,8 @@ export async function inviteMember(p: Principal, body: unknown) {
   try {
     await sendMail(
       b.email,
-      "You are invited to Arionys CDN",
-      `<h2>Arionys CDN</h2><p>You have been invited to a shared workspace.</p><p><a href="${link.href.replace(/&/g, "&amp;")}">Accept invitation</a></p><p>Sign in or create an account with this email address. You do not need your own R2 bucket to join.</p>`,
+      "You are invited to YourCDN",
+      `<h2>YourCDN</h2><p>You have been invited to a shared workspace.</p><p><a href="${link.href.replace(/&/g, "&amp;")}">Accept invitation</a></p><p>Sign in or create an account with this email address. You do not need your own R2 bucket to join.</p>`,
     );
   } catch (e) {
     await (await collection("invitations")).deleteOne({ _id: id });

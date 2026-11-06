@@ -1,4 +1,5 @@
 "use client";
+import { Brand } from "@/components/brand";
 import Link from "next/link";
 export default function ErrorPage({ retry }: { retry: () => void }) {
   return (
@@ -8,7 +9,7 @@ export default function ErrorPage({ retry }: { retry: () => void }) {
           className="auth-mini-brand"
           style={{ display: "block", marginBottom: 25 }}
         >
-          Arionys CDN
+          <Brand />
         </span>
         <h1>We couldn’t load this page.</h1>
         <p>

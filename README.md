@@ -1,4 +1,4 @@
-# Arionys CDN
+# YourCDN
 
 A Next.js application with verified email/password accounts, separate workspace memberships, per-workspace Cloudflare R2 storage, encrypted credentials, logical folders, API keys, and personal profile settings.
 
@@ -98,3 +98,7 @@ Browser retries keep a stable requestId rather than creating another reservation
 ## One-call upload
 
 Use `POST /api/v1/upload` with a scoped Bearer key and multipart `file`. Optional `visibility=public` exposes the returned URL; default is private. Success returns exactly `{url,name,size}`. Use a UUID `requestId` for safe retries. Dashboard uploads and the working `/docs` progress demo use this endpoint. See [API contract](docs/API.md) for limits, progress integration, and compatibility endpoints.
+
+## Public page and search visibility
+
+`/about` is the public YourCDN product page. Set `APP_URL` to your deployed HTTPS origin before building. The public page then publishes its canonical URL and social preview, and `/sitemap.xml` lists that page. Login, signup, invitations, and workspace pages retain `noindex`. A local or unset origin disables indexing and produces an empty sitemap.

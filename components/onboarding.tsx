@@ -1,4 +1,5 @@
 "use client";
+import { Brand } from "./brand";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
@@ -74,7 +75,7 @@ export function Onboarding({
     <main className="onboarding-page">
       <header>
         <a className="auth-logo" href="/dashboard">
-          <span className="auth-logo-mark">A</span>arionys<span>CDN</span>
+          <Brand />
         </a>
         <button
           className="text-button"
@@ -176,7 +177,7 @@ export function Onboarding({
                   maxLength={80}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Arionys Studio"
+                  placeholder="e.g. YourCDN Studio"
                 />
               </label>
             ) : (
@@ -273,7 +274,7 @@ export function Onboarding({
                   <summary>Allow browser uploads to your bucket</summary>
                   <p>
                     In Cloudflare → R2 → your bucket → Settings → CORS, add the
-                    exact origin where you use Arionys.
+                    exact origin where you use YourCDN.
                   </p>
                   <pre>
                     {JSON.stringify(

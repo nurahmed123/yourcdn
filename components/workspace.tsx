@@ -1,4 +1,5 @@
 "use client";
+import { Brand, BrandMark } from "./brand";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "nextjs-toploader/app";
@@ -129,27 +130,6 @@ const date = (d: string) =>
     day: "numeric",
     year: "numeric",
   });
-function Brand({ small = false }: { small?: boolean }) {
-  return (
-    <div className={`brand ${small ? "small" : ""}`}>
-      <span className="brand-mark">
-        <svg
-          width="27"
-          height="27"
-          viewBox="0 0 30 30"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path d="M5 23 14 6h3l9 17h-6l-5-10-5 10H5Z" fill="currentColor" />
-          <path d="m13 21 3-5 4 7h-6l-1-2Z" fill="#b8b1ff" />
-        </svg>
-      </span>
-      <span>
-        arionys<span className="brand-cdn">CDN</span>
-      </span>
-    </div>
-  );
-}
 function FileIcon({ type }: { type: string }) {
   const Icon = type.startsWith("image")
     ? FileImage
@@ -820,7 +800,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                   ? "A home for every file"
                   : view === "Overview"
                     ? "Everything, in one place"
-                    : "Arionys workspace"}
+                    : "YourCDN workspace"}
               </div>
               <h1>{view}</h1>
               <p>
@@ -1885,7 +1865,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
           )}
           <footer className="page-footer">
             <span>
-              <span className="footer-mark">A</span>Arionys CDN{" "}
+              <BrandMark size={18} /> YourCDN{" "}
               <span className="footer-dot">·</span> Built for what’s next.
             </span>
             <span>

@@ -1,4 +1,5 @@
 "use client";
+import { Brand, BrandMark } from "./brand";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
@@ -71,7 +72,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     <main className="auth-page">
       <section className="auth-story">
         <Link className="auth-logo" href="/login">
-          <span className="auth-logo-mark">A</span>arionys<span>CDN</span>
+          <Brand />
         </Link>
         <div className="auth-story-content">
           <div className="auth-cloud-art">
@@ -106,11 +107,15 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
             </span>
           </div>
         </div>
-        <small>Arionys CDN · Built around your workspace.</small>
+        <small>
+          <Link href="/about">About YourCDN</Link>
+        </small>
       </section>
       <section className="auth-form-side">
         <div className="auth-form-wrap">
-          <span className="auth-mini-brand">Arionys CDN</span>
+          <span className="auth-mini-brand">
+            <BrandMark size={24} /> YourCDN
+          </span>
           <p className="auth-eyebrow">
             {challenge
               ? "One more step"
@@ -238,7 +243,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
             <p className="auth-switch">
               {mode === "signup"
                 ? "Already have an account?"
-                : "New to Arionys?"}{" "}
+                : "New to YourCDN?"}{" "}
               <Link href={link(mode === "signup" ? "/login" : "/signup")}>
                 {mode === "signup" ? "Sign in" : "Create an account"}
               </Link>

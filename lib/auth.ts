@@ -173,7 +173,7 @@ export async function issueChallenge(payload: Record<string, unknown>) {
   try {
     await sendMail(
       payload.email as string,
-      "Your Arionys CDN verification code",
+      "Your YourCDN verification code",
       otpEmail(
         code,
         payload.kind === "storage-change"

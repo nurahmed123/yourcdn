@@ -1,4 +1,4 @@
-# Arionys CDN API v2 — workspace isolation
+# YourCDN API v2 — workspace isolation
 
 Responses: `{data: ...}` or `{error: string}`, except the single-call upload endpoint, which returns a flat `{url,name,size}` object. JSON request limit: 16 KB. Account endpoints require verified HttpOnly session cookies; mutations require the exact configured APP_URL Origin. External application requests use Bearer API keys. API keys are bound to one workspace and never authorize account, team, workspace, or profile operations.
 
@@ -7,8 +7,8 @@ Responses: `{data: ...}` or `{error: string}`, except the single-call upload end
 `POST /api/v1/upload` accepts `multipart/form-data` with exactly one `file` part. Requires a Bearer key with `files:upload`, or a verified workspace session with the configured Origin. The server streams the file to the workspace's R2 connection, verifies it, and saves permanent metadata. No reservation or completion calls and no temporary MongoDB upload document are needed.
 
 ```sh
-curl -X POST "$ARIONYS_URL/api/v1/upload" \
-  -H "Authorization: Bearer $ARIONYS_API_KEY" \
+curl -X POST "$YOURCDN_URL/api/v1/upload" \
+  -H "Authorization: Bearer $YOURCDN_API_KEY" \
   -F "file=@photo.jpg" \
   -F "visibility=public"
 ```
@@ -27,7 +27,7 @@ Optional multipart fields: `visibility` (private default, or public), `folderPat
 
 File size is counted from streamed bytes and capped by API key and server limits. Default Node cap: 100 MiB. Vercel: 4 MiB file cap (allowing multipart overhead under its request body limit). Configure `MAX_PROXY_UPLOAD_BYTES` within your hosting limit. Empty files, extra files, unknown/duplicate fields, malformed bodies, and invalid destination folders are rejected. Stream buffers are bounded; failed R2 multipart transfers are aborted and staging objects removed on handled errors. Configure an R2 lifecycle rule to remove old `staging/` objects and incomplete multipart uploads after one day to cover process crashes or storage outages.
 
-Use `XMLHttpRequest.upload.onprogress` for real client transfer percentage, then show **Processing** until the final JSON response arrives. Transfer progress measures bytes sent from the client, not final R2 verification. `/docs` includes animated progress, a real authenticated upload demo, browser code, and a streaming server forwarding example. Keep Bearer credentials on your own authenticated backend, not in browser JavaScript. Browser code calls that backend once; it forwards one multipart stream to Arionys.
+Use `XMLHttpRequest.upload.onprogress` for real client transfer percentage, then show **Processing** until the final JSON response arrives. Transfer progress measures bytes sent from the client, not final R2 verification. `/docs` includes animated progress, a real authenticated upload demo, browser code, and a streaming server forwarding example. Keep Bearer credentials on your own authenticated backend, not in browser JavaScript. Browser code calls that backend once; it forwards one multipart stream to YourCDN.
 
 Errors use `{ "error": "..." }` with 400 invalid input, 401 unauthenticated, 403 insufficient permissions, 404 unknown destination, 409 conflicting retry ID, 413 size limit, 415 unsupported content type, 429 quota, and 502/503 storage/service failure. Failed requests never create permanent file metadata or pending upload records.
 

@@ -5,7 +5,7 @@ import { uploadFile, type UploadResult } from "./upload-file";
 const browserExample = `function upload(file, onProgress, onStatus) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    // Your authenticated backend forwards this one request to Arionys.
+    // Your authenticated backend forwards this one request to YourCDN.
     xhr.open("POST", "/api/upload");
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
@@ -37,11 +37,11 @@ const browserExample = `function upload(file, onProgress, onStatus) {
 const serverExample = `// Your application's authenticated Node.js upload handler.
 // Check your own user's session and upload permission BEFORE forwarding.
 const upstream = await fetch(
-  process.env.ARIONYS_URL + "/api/v1/upload",
+  process.env.YOURCDN_URL + "/api/v1/upload",
   {
     method: "POST",
     headers: {
-      Authorization: "Bearer " + process.env.ARIONYS_API_KEY,
+      Authorization: "Bearer " + process.env.YOURCDN_API_KEY,
       "Content-Type": request.headers.get("content-type"),
     },
     body: request.body,
@@ -77,8 +77,8 @@ export function ApiDocumentation({
           return its URL, name, and size. No reservation or completion requests.
         </p>
         <h3>Upload from your server</h3>
-        <pre>{`curl -X POST "$ARIONYS_URL/api/v1/upload" \\
-  -H "Authorization: Bearer $ARIONYS_API_KEY" \\
+        <pre>{`curl -X POST "$YOURCDN_URL/api/v1/upload" \\
+  -H "Authorization: Bearer $YOURCDN_API_KEY" \\
   -F "file=@photo.jpg" \\
   -F "visibility=public"`}</pre>
         <h3>Response · 201 Created</h3>
@@ -160,7 +160,7 @@ export function ApiDocumentation({
         <h3>Forward from your authenticated backend</h3>
         <p>
           After checking your application’s session and upload permissions,
-          forward the body as a stream. Store ARIONYS_API_KEY and ARIONYS_URL in
+          forward the body as a stream. Store YOURCDN_API_KEY and YOURCDN_URL in
           server environment variables.
         </p>
         <pre>{serverExample}</pre>

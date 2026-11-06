@@ -124,7 +124,7 @@ export async function verifyStorage(c: R2Credentials) {
       new PutObjectCommand({
         Bucket: c.bucket,
         Key: key,
-        Body: "Arionys connection verification",
+        Body: "YourCDN connection verification",
         ContentType: "text/plain",
       }),
     );

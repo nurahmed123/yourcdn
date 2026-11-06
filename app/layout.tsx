@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { SITE_DESCRIPTION, SITE_NAME, siteOrigin } from "@/lib/site";
 import NextTopLoader from "nextjs-toploader";
 import "@fontsource-variable/dm-sans";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Arionys CDN — Your file workspace",
-  description: "Manage, store, and deliver your files with Arionys CDN.",
+  title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+  applicationName: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  ...(siteOrigin ? { metadataBase: new URL(siteOrigin) } : {}),
   robots: { index: false, follow: false },
 };
 export default function RootLayout({
