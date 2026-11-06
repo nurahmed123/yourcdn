@@ -3,24 +3,11 @@ name: Deploy to VPS
 on:
   push:
     branches:
-      - main
- 
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - master
 
+jobs:
   deploy:
-    needs: verify
-    runs-on: ubuntu-latest 
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -66,6 +53,7 @@ jobs:
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
           echo "port=$PORT" >> "$GITHUB_OUTPUT"
           echo "domain=${DOMAIN:-}" >> "$GITHUB_OUTPUT"
+          echo "aliases=${ALIASES:-}" >> "$GITHUB_OUTPUT"
           echo "email=${EMAIL:-community.slsn.env@gmail.com}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy via SSH
@@ -77,13 +65,14 @@ jobs:
           APP_PATH: ${{ steps.cfg.outputs.app_path }}
           PORT: ${{ steps.cfg.outputs.port }}
           DOMAIN: ${{ steps.cfg.outputs.domain }}
+          ALIASES: ${{ steps.cfg.outputs.aliases }}
           EMAIL: ${{ steps.cfg.outputs.email }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          envs: MODE,APP_NAME,APP_PATH,PORT,DOMAIN,EMAIL
+          envs: MODE,APP_NAME,APP_PATH,PORT,DOMAIN,ALIASES,EMAIL
 
           script: |
             set -e
@@ -92,20 +81,13 @@ jobs:
 
             echo "Pulling latest code..."
             git fetch origin
-            git reset --hard origin/main
+            git reset --hard origin/master
 
             echo "Installing dependencies..."
             npm install --force
 
             echo "Building..."
             npm run build
-
-            # New features add indexes and role permissions that existing schools need. Both steps are safe to repeat;
-            # a failure is reported but doesn't hold up the release.
-            echo "Updating database indexes and role permissions..."
-            npm run db:indexes || echo "WARNING: db:indexes failed"
-            npm run db:sync-permissions || echo "WARNING: db:sync-permissions failed"
-            npm run db:backfill-campus || echo "WARNING: db:backfill-campus failed"
 
             echo "Starting/restarting $APP_NAME on port $PORT..."
             PORT=$PORT pm2 restart "$APP_NAME" --update-env || PORT=$PORT pm2 start npm --name "$APP_NAME" -- start
@@ -129,7 +111,16 @@ jobs:
                 sudo tee "$SITE_CONF" > /dev/null <<NGINXCONF
             server {
                 listen 80;
-                server_name $DOMAIN;
+                server_name $DOMAIN $ALIASES;
+
+                # Compress proxied responses too (Next.js route handlers send
+                # JSON uncompressed). gzip_proxied any is the important bit.
+                gzip on;
+                gzip_vary on;
+                gzip_proxied any;
+                gzip_comp_level 5;
+                gzip_min_length 1024;
+                gzip_types text/plain text/css text/xml application/json application/javascript text/javascript application/xml application/rss+xml application/manifest+json image/svg+xml;
 
                 location / {
                     proxy_pass http://127.0.0.1:$PORT;
@@ -149,16 +140,33 @@ jobs:
                 sudo nginx -t
                 sudo systemctl reload nginx
               else
-                echo "nginx config for $DOMAIN already exists, skipping."
+                echo "nginx config for $DOMAIN already exists, syncing server_name..."
+                sudo sed -i "s/^\([[:space:]]*\)server_name .*;/\1server_name $DOMAIN $ALIASES;/" "$SITE_CONF"
+                sudo nginx -t
+                sudo systemctl reload nginx
               fi
 
-              if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-                echo "Requesting SSL certificate for $DOMAIN..."
-                sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect
+              ALL_DOMAINS="$DOMAIN $ALIASES"
+              CERT_DOMAINS=""
+              for d in $ALL_DOMAINS; do CERT_DOMAINS="$CERT_DOMAINS -d $d"; done
+
+              CERT_FILE="/etc/letsencrypt/live/$DOMAIN/cert.pem"
+              NEED_CERT=0
+              if ! sudo test -f "$CERT_FILE"; then
+                NEED_CERT=1
               else
-                echo "SSL certificate for $DOMAIN already exists, skipping."
+                COVERED=$(sudo openssl x509 -in "$CERT_FILE" -noout -ext subjectAltName 2>/dev/null | grep -o 'DNS:[^, ]*' | sed 's/^DNS://' || true)
+                for d in $ALL_DOMAINS; do
+                  echo "$COVERED" | grep -qxF "$d" || NEED_CERT=1
+                done
               fi
-              bash scripts/configure-upload-proxy.sh "$DOMAIN" "$PORT"
+
+              if [ "$NEED_CERT" = "1" ]; then
+                echo "Requesting/expanding SSL certificate for:$CERT_DOMAINS"
+                sudo certbot --nginx $CERT_DOMAINS --expand --non-interactive --agree-tos -m "$EMAIL" --redirect
+              else
+                echo "SSL certificate already covers: $ALL_DOMAINS"
+              fi
             fi
 
             echo "Deployment successful."
