@@ -16,7 +16,7 @@ The email provider is the supplied `https://mailapi.arionys.com/api/send` servic
 
 ## User journeys and route protection
 
-`/` redirects to `/login` for visitors and `/dashboard` for signed-in accounts. `/login` and `/signup` have their own pages. Every `/dashboard`, `/files`, `/api-keys`, `/team`, `/activity`, `/settings`, and `/docs` page checks the actual server-side session and active membership before rendering. Signed-in users without a ready workspace go to `/onboarding`. Team page additionally requires workspace owner/admin access. Database errors fail closed.
+`/` redirects to `/login` for visitors and `/dashboard` for signed-in accounts. `/login` and `/signup` have their own pages. Every `/dashboard`, `/files`, `/api-keys`, `/team`, `/activity`, and `/settings` page checks the actual server-side session and active membership before rendering. Signed-in users without a ready workspace go to `/onboarding`. Team page additionally requires workspace owner/admin access. Database errors fail closed. `/docs` is readable without login. The workspace sidebar and upload demo are only shown to signed-in users with a ready workspace.
 
 Onboarding supports creating multiple workspaces. Each has its own R2 credentials, memberships, files, folders, API keys, and audit events. The workspace picker switches the active workspace in the current session, then reloads the interface to clear the previous workspace’s client state. Tabs sharing a session share its workspace selection. API keys stay bound to their original workspace.
 

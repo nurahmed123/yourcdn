@@ -58,13 +58,16 @@ return new Response(upstream.body, {
 });`;
 export function ApiDocumentation({
   canUpload = true,
+  standalone = false,
 }: {
   canUpload?: boolean;
+  standalone?: boolean;
 }) {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("Choose a file to try a real upload.");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
+  const Reference = standalone ? "section" : "aside";
   return (
     <div className="docs-layout">
       <section className="panel docs">
@@ -93,63 +96,67 @@ export function ApiDocumentation({
           such as website/images. Folder details are never added to this
           response.
         </p>
-        <h3>Try an upload</h3>
-        <p>
-          {canUpload
-            ? "This uploads a private file to your current workspace using your signed-in account."
-            : "Your viewer role can read files but cannot upload. Ask a workspace editor or admin for upload access."}
-        </p>
-        <label>
-          Choose file
-          <input
-            type="file"
-            disabled={busy || !canUpload}
-            onChange={async (e) => {
-              const file = e.currentTarget.files?.[0];
-              e.currentTarget.value = "";
-              if (!file) return;
-              setBusy(true);
-              setResult(null);
-              setProgress(0);
-              setStatus("Uploading…");
-              try {
-                const data = await uploadFile(
-                  file,
-                  { requestId: crypto.randomUUID() },
-                  (percent, processing) => {
-                    setProgress(percent);
-                    setStatus(
-                      processing
-                        ? "Processing…"
-                        : percent === 100
-                          ? "Uploaded"
-                          : "Uploading…",
+        {!standalone && (
+          <>
+            <h3>Try an upload</h3>
+            <p>
+              {canUpload
+                ? "This uploads a private file to your current workspace using your signed-in account."
+                : "Your viewer role can read files but cannot upload. Ask a workspace editor or admin for upload access."}
+            </p>
+            <label>
+              Choose file
+              <input
+                type="file"
+                disabled={busy || !canUpload}
+                onChange={async (e) => {
+                  const file = e.currentTarget.files?.[0];
+                  e.currentTarget.value = "";
+                  if (!file) return;
+                  setBusy(true);
+                  setResult(null);
+                  setProgress(0);
+                  setStatus("Uploading…");
+                  try {
+                    const data = await uploadFile(
+                      file,
+                      { requestId: crypto.randomUUID() },
+                      (percent, processing) => {
+                        setProgress(percent);
+                        setStatus(
+                          processing
+                            ? "Processing…"
+                            : percent === 100
+                              ? "Uploaded"
+                              : "Uploading…",
+                        );
+                      },
                     );
-                  },
-                );
-                setResult(data);
-              } catch (error) {
-                setStatus((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        </label>
-        <div
-          role="progressbar"
-          aria-label="Upload progress"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-          className="api-progress"
-        >
-          <div style={{ width: `${progress}%` }} />
-        </div>
-        <p role="status">
-          {status} {progress > 0 && `${progress}%`}
-        </p>
-        {result && <pre>{JSON.stringify(result, null, 2)}</pre>}
+                    setResult(data);
+                  } catch (error) {
+                    setStatus((error as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            </label>
+            <div
+              role="progressbar"
+              aria-label="Upload progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+              className="api-progress"
+            >
+              <div style={{ width: `${progress}%` }} />
+            </div>
+            <p role="status">
+              {status} {progress > 0 && `${progress}%`}
+            </p>
+            {result && <pre>{JSON.stringify(result, null, 2)}</pre>}
+          </>
+        )}
         <h3>Show progress in your application</h3>
         <p>
           Use XMLHttpRequest to measure bytes sent. Keep a Processing state
@@ -165,7 +172,7 @@ export function ApiDocumentation({
         </p>
         <pre>{serverExample}</pre>
       </section>
-      <aside className="panel docs-aside">
+      <Reference className="panel docs-aside" aria-label="API reference">
         <h3>Upload contract</h3>
         <p>
           One multipart file per request. Required API permission:{" "}
@@ -195,7 +202,7 @@ export function ApiDocumentation({
           this endpoint caps files at 4 MiB.
         </p>
         <pre>{`{ "error": "Reason for failure" }`}</pre>
-      </aside>
+      </Reference>
     </div>
   );
 }

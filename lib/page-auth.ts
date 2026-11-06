@@ -30,3 +30,13 @@ export async function requireWorkspace() {
     redirect("/onboarding");
   return user;
 }
+
+export async function optionalWorkspace() {
+  try {
+    const user = await me(await pageRequest());
+    return user.activeWorkspace?.status === "ready" ? user : null;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) return null;
+    throw e;
+  }
+}

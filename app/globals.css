@@ -3674,3 +3674,26 @@ label > select {
 .about-features dt { font-weight: 750; margin-bottom: 9px; }
 .about-features dd { margin: 0; color: #514468; line-height: 1.55; }
 @media (max-width: 650px) { .about-features { grid-template-columns: 1fr; } }
+
+.public-docs {
+  max-width: 960px;
+  margin-inline: auto;
+  padding: 28px clamp(16px, 5vw, 52px) 64px;
+}
+.public-docs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e2d9f3;
+}
+.public-docs-intro { margin: 44px 0 28px; }
+.public-docs-intro h1 {
+  font-size: clamp(32px, 6vw, 54px);
+  letter-spacing: -.055em;
+  line-height: 1.06;
+  margin: 0 0 12px;
+}
+.public-docs-intro p { color: #514468; line-height: 1.55; margin: 0; }
+.public-docs .docs-layout { grid-template-columns: minmax(0, 1fr); }
