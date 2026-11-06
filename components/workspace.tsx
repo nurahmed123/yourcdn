@@ -1,5 +1,6 @@
 "use client";
 import { Brand, BrandMark } from "./brand";
+import { Modal } from "./modal";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "nextjs-toploader/app";
@@ -148,78 +149,6 @@ function FileIcon({ type }: { type: string }) {
     </span>
   );
 }
-function Modal({
-  title,
-  description,
-  children,
-  onClose,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement;
-    const root = box.current;
-    root?.querySelector<HTMLElement>("input,button,select,textarea")?.focus();
-    function handle(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-      if (e.key === "Tab" && root) {
-        const list = Array.from(
-          root.querySelectorAll<HTMLElement>(
-            "button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea,a[href]",
-          ),
-        );
-        const first = list[0],
-          last = list.at(-1);
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
-    }
-    document.addEventListener("keydown", handle);
-    return () => {
-      document.removeEventListener("keydown", handle);
-      previous?.focus();
-    };
-  }, [onClose]);
-  return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        ref={box}
-      >
-        <button
-          className="icon-button close-modal"
-          aria-label="Close dialog"
-          onClick={onClose}
-        >
-          <X size={20} />
-        </button>
-        <Brand small />
-        <h2>{title}</h2>
-        {description && (
-          <p className="muted modal-description">{description}</p>
-        )}
-        {children}
-      </div>
-    </div>
-  );
-}
 const routeViews: Record<string, View> = {
   "/dashboard": "Overview",
   "/files": "File library",
@@ -234,7 +163,7 @@ const viewRoutes = Object.fromEntries(
   Object.entries(routeViews).map(([route, view]) => [view, route]),
 );
 export default function Workspace({ initialUser }: { initialUser: User }) {
-  const router = useRouter(),
+  const { push, replace } = useRouter(),
     pathname = usePathname(),
     searchParams = useSearchParams();
   const view = routeViews[pathname] || "Overview";
@@ -306,12 +235,14 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
       .then((me) => {
         if (active) setUser(me);
       })
-      .catch(() => router.replace("/login"));
+      .catch(() => {
+        if (active) replace("/login");
+      });
     void refresh().catch((e) => setPageError(e.message));
     return () => {
       active = false;
     };
-  }, [refresh, router]);
+  }, [refresh, replace]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -422,13 +353,13 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
     void loadView();
   }, [loadView]);
   function navigate(v: View) {
-    router.push(viewRoutes[v]);
+    push(viewRoutes[v]);
     setMobile(false);
     setPageError("");
   }
   function requireUser() {
     if (!user) {
-      router.replace("/login");
+      replace("/login");
       return false;
     }
     return true;
@@ -644,7 +575,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
         </div>
         <button
           className="new-workspace-button"
-          onClick={() => router.push("/onboarding?new=1")}
+          onClick={() => push("/onboarding?new=1")}
         >
           <Plus size={13} />
           New workspace
@@ -1037,7 +968,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                     </div>
                     <div className="folder-toolbar">
                       <div className="folder-breadcrumbs">
-                        <button onClick={() => router.push("/files")}>
+                        <button onClick={() => push("/files")}>
                           <FolderOpen size={15} />
                           All files
                         </button>
@@ -1046,7 +977,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                             <ChevronRight size={13} />
                             <button
                               onClick={() =>
-                                router.push(`/files?folder=${f.id}`)
+                                push(`/files?folder=${f.id}`)
                               }
                             >
                               {f.name}
@@ -1166,7 +1097,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                             <button
                               className="folder-open"
                               onClick={() =>
-                                router.push(`/files?folder=${f.id}`)
+                                push(`/files?folder=${f.id}`)
                               }
                             >
                               <FolderOpen size={24} />
