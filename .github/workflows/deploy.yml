@@ -1,0 +1,163 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+ 
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --force --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest 
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read deployment config
+        id: cfg
+        shell: bash
+        run: |
+          CONFIG_FILE=".github/workflows/deploy.config"
+
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "Error: $CONFIG_FILE not found."
+            exit 1
+          fi
+
+          set -a
+          source "$CONFIG_FILE"
+          set +a
+
+          MODE="${MODE,,}"
+          if [ "$MODE" != "dev" ] && [ "$MODE" != "build" ] && [ "$MODE" != "host" ]; then
+            echo "Error: MODE must be 'dev', 'build' or 'host' in deploy.config"
+            exit 1
+          fi
+
+          if [ "$MODE" = "dev" ]; then
+            echo "MODE=dev: skipping deployment."
+            echo "mode=dev" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          : "${APP_NAME:?APP_NAME is required in deploy.config}"
+          : "${APP_PATH:?APP_PATH is required in deploy.config}"
+          : "${PORT:?PORT is required in deploy.config}"
+
+          if [ "$MODE" = "host" ]; then
+            : "${DOMAIN:?DOMAIN is required in deploy.config when MODE=host}"
+          fi
+
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+          echo "port=$PORT" >> "$GITHUB_OUTPUT"
+          echo "domain=${DOMAIN:-}" >> "$GITHUB_OUTPUT"
+          echo "email=${EMAIL:-community.slsn.env@gmail.com}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy via SSH
+        if: steps.cfg.outputs.mode != 'dev'
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          MODE: ${{ steps.cfg.outputs.mode }}
+          APP_NAME: ${{ steps.cfg.outputs.app_name }}
+          APP_PATH: ${{ steps.cfg.outputs.app_path }}
+          PORT: ${{ steps.cfg.outputs.port }}
+          DOMAIN: ${{ steps.cfg.outputs.domain }}
+          EMAIL: ${{ steps.cfg.outputs.email }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          envs: MODE,APP_NAME,APP_PATH,PORT,DOMAIN,EMAIL
+
+          script: |
+            set -e
+
+            cd "$APP_PATH"
+
+            echo "Pulling latest code..."
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "Installing dependencies..."
+            npm install --force
+
+            echo "Building..."
+            npm run build
+
+            # New features add indexes and role permissions that existing schools need. Both steps are safe to repeat;
+            # a failure is reported but doesn't hold up the release.
+            echo "Updating database indexes and role permissions..."
+            npm run db:indexes || echo "WARNING: db:indexes failed"
+            npm run db:sync-permissions || echo "WARNING: db:sync-permissions failed"
+            npm run db:backfill-campus || echo "WARNING: db:backfill-campus failed"
+
+            echo "Starting/restarting $APP_NAME on port $PORT..."
+            PORT=$PORT pm2 restart "$APP_NAME" --update-env || PORT=$PORT pm2 start npm --name "$APP_NAME" -- start
+            pm2 save
+
+            if [ "$MODE" = "host" ]; then
+              echo "Ensuring nginx reverse proxy + SSL are set up for $DOMAIN..."
+
+              if ! command -v nginx >/dev/null 2>&1; then
+                sudo apt-get update -y
+                sudo apt-get install -y nginx
+              fi
+              if ! command -v certbot >/dev/null 2>&1; then
+                sudo apt-get update -y
+                sudo apt-get install -y certbot python3-certbot-nginx
+              fi
+
+              SITE_CONF="/etc/nginx/sites-available/$DOMAIN"
+              if [ ! -f "$SITE_CONF" ]; then
+                echo "Creating nginx site config for $DOMAIN -> 127.0.0.1:$PORT"
+                sudo tee "$SITE_CONF" > /dev/null <<NGINXCONF
+            server {
+                listen 80;
+                server_name $DOMAIN;
+
+                location / {
+                    proxy_pass http://127.0.0.1:$PORT;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+            }
+            NGINXCONF
+
+                sudo ln -sf "$SITE_CONF" "/etc/nginx/sites-enabled/$DOMAIN"
+                sudo nginx -t
+                sudo systemctl reload nginx
+              else
+                echo "nginx config for $DOMAIN already exists, skipping."
+              fi
+
+              if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+                echo "Requesting SSL certificate for $DOMAIN..."
+                sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect
+              else
+                echo "SSL certificate for $DOMAIN already exists, skipping."
+              fi
+            fi
+
+            echo "Deployment successful."
