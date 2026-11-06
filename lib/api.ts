@@ -244,10 +244,8 @@ export async function dispatch(req: Request, path: string[]) {
       "Content-Length": String(object.ContentLength || 0),
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
-      "Cache-Control":
-        file.visibility === "public"
-          ? "public, max-age=60, s-maxage=60"
-          : "private, no-store",
+      // The same URL can become private. Never serve a stale public copy.
+      "Cache-Control": "private, no-store",
       "Accept-Ranges": "bytes",
     };
     if (object.ContentRange) headers["Content-Range"] = object.ContentRange;
@@ -779,26 +777,42 @@ export async function dispatch(req: Request, path: string[]) {
       );
       return { success: true };
     }
-    const file = await fileFor(path[2], p);
-    const storage = await workspaceStorage(
-      p.workspaceId,
-      file.storageVersion || 1,
-    );
     if (method === "PATCH" && path.length === 3) {
-      const b = z
-        .object({ folderId: z.string().uuid().nullable() })
+      idSchema.parse(path[2]);
+      const updates = z
+        .object({
+          folderId: z.string().uuid().nullable().optional(),
+          visibility: z.enum(["public", "private"]).optional(),
+        })
+        .strict()
+        .refine(
+          (value) =>
+            value.folderId !== undefined || value.visibility !== undefined,
+        )
         .parse(await json(req));
-      await folderFor(b.folderId, p);
-      await (
+      if (updates.folderId !== undefined) await folderFor(updates.folderId, p);
+      const file = await (
         await collection("files")
-      ).updateOne(
-        { _id: file._id, workspaceId: p.workspaceId },
-        { $set: { folderId: b.folderId } },
+      ).findOneAndUpdate(
+        { _id: path[2], status: "ready", ...fileFilter(p) },
+        { $set: updates },
+        { returnDocument: "after" },
       );
-      await event(p.email, "Moved file", file.name, p.workspaceId);
-      return { ...publicFile(file), folderId: b.folderId };
+      if (!file) throw new ApiError(404, "File not found.");
+      const action = updates.visibility
+        ? `Made file ${updates.visibility}`
+        : "Moved file";
+      await event(p.email, action, file.name, p.workspaceId).catch(
+        () => undefined,
+      );
+      return publicFile(file);
     }
-    if (method === "GET" && path[3] === "download" && path.length === 4)
+    if (method === "GET" && path[3] === "download" && path.length === 4) {
+      const file = await fileFor(path[2], p);
+      const storage = await workspaceStorage(
+        p.workspaceId,
+        file.storageVersion || 1,
+      );
       return new Response(null, {
         status: 302,
         headers: {
@@ -807,6 +821,7 @@ export async function dispatch(req: Request, path: string[]) {
           "Referrer-Policy": "no-referrer",
         },
       });
+    }
   }
   throw new ApiError(404, "Endpoint not found.");
 }

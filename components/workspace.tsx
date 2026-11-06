@@ -76,6 +76,35 @@ type StoredFile = {
   createdAt: string;
   source: string;
 };
+function VisibilityBadge({
+  file,
+  onEdit,
+}: {
+  file: StoredFile;
+  onEdit?: () => void;
+}) {
+  const style = `badge ${file.visibility === "public" ? "success" : "neutral"}`;
+  const Icon = file.visibility === "public" ? Globe2 : LockKeyhole;
+  const text = (
+    <>
+      <Icon size={11} aria-hidden="true" />
+      {file.visibility === "public" ? "Public" : "Private"}
+    </>
+  );
+  return onEdit ? (
+    <button
+      type="button"
+      className={`${style} visibility-action`}
+      onClick={onEdit}
+      aria-label={`Change visibility of ${file.name} (currently ${file.visibility})`}
+    >
+      {text}
+      <ChevronDown size={12} aria-hidden="true" />
+    </button>
+  ) : (
+    <span className={style}>{text}</span>
+  );
+}
 type ApiKey = {
   id: string;
   name: string;
@@ -172,7 +201,8 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
       [],
     ),
     [folderOpen, setFolderOpen] = useState(false),
-    [movingFile, setMovingFile] = useState<StoredFile | null>(null);
+    [movingFile, setMovingFile] = useState<StoredFile | null>(null),
+    [visibilityFile, setVisibilityFile] = useState<StoredFile | null>(null);
   const [mobile, setMobile] = useState(false),
     [user, setUser] = useState<User | null>(initialUser),
     [stats, setStats] = useState<Stats | null>(null),
@@ -1223,11 +1253,14 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                           <article className="file-card" key={f.id}>
                             <div className="file-card-preview">
                               <FileIcon type={f.contentType} />
-                              <span
-                                className={`badge ${f.visibility === "public" ? "success" : "neutral"}`}
-                              >
-                                {f.visibility}
-                              </span>
+                              <VisibilityBadge
+                                file={f}
+                                onEdit={
+                                  canEdit
+                                    ? () => setVisibilityFile(f)
+                                    : undefined
+                                }
+                              />
                             </div>
                             <strong title={f.name}>{f.name}</strong>
                             <small>
@@ -1331,16 +1364,14 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                                 </td>
                                 <td className="nowrap">{size(f.size)}</td>
                                 <td>
-                                  <span
-                                    className={`badge ${f.visibility === "public" ? "success" : "neutral"}`}
-                                  >
-                                    {f.visibility === "public" ? (
-                                      <Globe2 size={11} />
-                                    ) : (
-                                      <LockKeyhole size={11} />
-                                    )}{" "}
-                                    {f.visibility}
-                                  </span>
+                                  <VisibilityBadge
+                                    file={f}
+                                    onEdit={
+                                      canEdit
+                                        ? () => setVisibilityFile(f)
+                                        : undefined
+                                    }
+                                  />
                                 </td>
                                 <td className="nowrap">{date(f.createdAt)}</td>
                                 <td>
@@ -1830,6 +1861,62 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
             <X size={15} />
           </button>
         </div>
+      )}
+      {visibilityFile && (
+        <Modal
+          title="Change file visibility"
+          description={
+            visibilityFile.visibility === "private"
+              ? `${visibilityFile.name} will be accessible to anyone with its existing URL.`
+              : `${visibilityFile.name} will require authorized workspace access. Previously downloaded copies cannot be recalled.`
+          }
+          onClose={() => {
+            if (!busy) setVisibilityFile(null);
+          }}
+        >
+          <button
+            type="button"
+            className="button primary full"
+            disabled={busy}
+            onClick={async () => {
+              const target =
+                visibilityFile.visibility === "public" ? "private" : "public";
+              setBusy(true);
+              try {
+                const updated = await api<StoredFile>(
+                  `v1/files/${visibilityFile.id}`,
+                  {
+                    method: "PATCH",
+                    body: JSON.stringify({ visibility: target }),
+                  },
+                );
+                setFiles((previous) =>
+                  previous.map((file) =>
+                    file.id === updated.id
+                      ? { ...file, visibility: updated.visibility }
+                      : file,
+                  ),
+                );
+                setVisibilityFile(null);
+                notify(
+                  updated.visibility === "public"
+                    ? "File is now public."
+                    : "File is now private.",
+                );
+                void refresh().catch(() => undefined);
+              } catch (error) {
+                notify((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy && <Loader2 size={16} className="spin" />}
+            {visibilityFile.visibility === "public"
+              ? "Make private"
+              : "Make public"}
+          </button>
+        </Modal>
       )}
       {movingFile && (
         <MoveFileDialog

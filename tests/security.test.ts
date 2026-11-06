@@ -1934,3 +1934,92 @@ test("new keys can use the R2 size ceiling with disk-backed multipart uploads", 
   assert.deepEqual(partLengths, [5 * 1024 * 1024 + 1, 1024 * 1024 - 1]);
   assert.equal(s3.commandCalls(CopyObjectCommand).length, 0);
 });
+
+test("file visibility changes keep the URL and recheck access on subsequent requests", async () => {
+  const a = await setup();
+  const id = randomUUID();
+  const url = `${origin}/api/v1/content/${id}`;
+  const objectKey = `files/${id}/photo.jpg`;
+  const files = await collection("files");
+  await files.insertOne({
+    _id: id,
+    workspaceId: a.workspaceId,
+    name: "photo.jpg",
+    visibility: "private",
+    size: 5,
+    contentType: "image/jpeg",
+    status: "ready",
+    folderId: null,
+    objectKey,
+    url,
+    createdAt: new Date(),
+  });
+  s3.on(GetObjectCommand).callsFake(() => ({
+    ContentLength: 5,
+    Body: { transformToWebStream: () => new Response("hello").body! } as any,
+  }));
+  const patch = (visibility: string) =>
+    dispatch(request(`v1/files/${id}`, "PATCH", { visibility }, a.headers), [
+      "v1",
+      "files",
+      id,
+    ]);
+  const read = (headers: Record<string, string> = {}) =>
+    dispatch(request(`v1/content/${id}`, "GET", undefined, headers), [
+      "v1",
+      "content",
+      id,
+    ]) as Promise<Response>;
+
+  await assert.rejects(read(), status(401));
+  assert.deepEqual(
+    (({ visibility, url }) => ({ visibility, url }))(
+      (await patch("public")) as any,
+    ),
+    { visibility: "public", url },
+  );
+  const published = await read();
+  assert.equal(await published.text(), "hello");
+  assert.match(published.headers.get("cache-control")!, /no-store/);
+
+  const privateFile = (await patch("private")) as any;
+  assert.equal(privateFile.visibility, "private");
+  assert.equal(privateFile.url, url);
+  await assert.rejects(read(), status(401));
+  assert.equal(await (await read(a.headers)).text(), "hello");
+  assert.equal((await files.findOne({ _id: id }))!.objectKey, objectKey);
+  assert.equal(s3.commandCalls(CopyObjectCommand).length, 0);
+});
+
+test("visibility changes require editor access and stay within file ownership", async () => {
+  const a = await setup();
+  const id = randomUUID();
+  const files = await collection("files");
+  await files.insertOne({
+    _id: id,
+    workspaceId: a.workspaceId,
+    apiKeyId: "original-key",
+    visibility: "private",
+    status: "ready",
+  });
+  const patch = (headers: Record<string, string>) =>
+    dispatch(
+      request(`v1/files/${id}`, "PATCH", { visibility: "public" }, headers),
+      ["v1", "files", id],
+    );
+  const otherKey = await key(a.userId, a.workspaceId);
+  await assert.rejects(patch(otherKey.headers), status(404));
+  const otherWorkspace = await workspace(a.userId, "Other workspace");
+  await assert.rejects(
+    patch(await session(a.userId, otherWorkspace)),
+    status(404),
+  );
+  await (
+    await collection("memberships")
+  ).updateOne(
+    { workspaceId: a.workspaceId, userId: a.userId },
+    { $set: { role: "viewer" } },
+  );
+  await assert.rejects(patch(a.headers), status(403));
+  assert.equal((await files.findOne({ _id: id }))!.visibility, "private");
+});

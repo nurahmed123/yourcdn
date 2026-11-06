@@ -66,10 +66,10 @@ Workspace session members share workspace files according to role. API keys addi
 - `POST /api/v1/uploads` — `{name,size,contentType,visibility,folderId?}` or `{...,folderPath:"website/images/heroes"}`. Requires files:upload. folderPath automatically creates missing subfolders; use either folderId or folderPath. Private by default. Returns id and short-lived signed PUT URL.
 - `PUT uploadUrl` — send the exact binary bytes with the declared Content-Type and Content-Length; upload directly to the workspace’s R2 bucket.
 - `POST /api/v1/uploads/:id/complete` — verifies size/type, copies with source ETag precondition to a new immutable object key, stores workspaceId, folderId, metadata and stable URL in MongoDB. Only the original user/key in the original workspace can complete the upload. Idempotent after completion.
-- `PATCH /api/v1/files/:id` — folderId (nullable); requires files:upload. Moves file in logical hierarchy; stable URL is preserved.
+- `PATCH /api/v1/files/:id` — accepts `folderId` (nullable), `visibility` (`public` or `private`), or both. Requires `files:upload` and editor access; API keys can only modify their own files. Changes preserve the URL and R2 object.
 - `DELETE /api/v1/files/:id` — requires files:delete. Permanently removes object and metadata.
 - `GET /api/v1/files/:id/download` — requires files:read; redirects to a 60-second signed R2 GET URL.
-- `GET /api/v1/content/:id` — controlled file gateway; public files can be read without login, private files require membership in the file’s workspace and appropriate key ownership. Single-range streaming supported. Private responses never cached.
+- `GET /api/v1/content/:id` — controlled file gateway; public files can be read without login, private files require membership in the file’s workspace and appropriate key ownership. Single-range streaming supported. Responses are not cached so visibility changes apply to subsequent requests; previously downloaded copies are unaffected.
 
 ## API keys
 

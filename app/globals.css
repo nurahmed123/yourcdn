@@ -3697,3 +3697,11 @@ label > select {
 }
 .public-docs-intro p { color: #514468; line-height: 1.55; margin: 0; }
 .public-docs .docs-layout { grid-template-columns: minmax(0, 1fr); }
+
+button.visibility-action {
+  border: 0;
+  cursor: pointer;
+}
+button.visibility-action:hover {
+  box-shadow: 0 0 0 1px currentColor;
+}
