@@ -190,9 +190,9 @@ export function ApiDocumentation({
         <h3>Limits & errors</h3>
         <p>
           Workspace role, API key expiry, request quota, and file size limits
-          apply. Local Node hosting allows up to 100 MB by default; Vercel
-          hosting limits this endpoint to 4 MB per file. Larger files need
-          hosting with a larger request limit.
+          apply. YourCDN on a self-hosted Node server supports the R2 object
+          limit of about 4.995 TiB. Your host or proxy may allow less; on Vercel
+          this endpoint caps files at 4 MiB.
         </p>
         <pre>{`{ "error": "Reason for failure" }`}</pre>
       </aside>

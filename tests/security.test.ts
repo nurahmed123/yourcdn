@@ -201,7 +201,10 @@ function mockStorage() {
   });
 }
 before(async () => {
-  process.env.MONGOMS_DOWNLOAD_DIR ??= join(tmpdir(), "yourcdn-mongodb-binaries");
+  process.env.MONGOMS_DOWNLOAD_DIR ??= join(
+    tmpdir(),
+    "yourcdn-mongodb-binaries",
+  );
   mongo = await MongoMemoryServer.create();
   Object.assign(process.env, {
     MONGODB_URI: mongo.getUri(),
@@ -1117,6 +1120,50 @@ test("Never expiry does not bypass request quotas, and a missing expiry remains 
   );
 });
 
+test("Unlimited requests counts usage beyond the numeric cap while preserving key restrictions", async () => {
+  const { headers } = await setup();
+  const created = (await dispatch(
+    request(
+      "keys",
+      "POST",
+      {
+        name: "Unlimited integration",
+        scopes: ["files:read"],
+        expiresInDays: 30,
+        maxRequests: null,
+        maxUploadBytes: 1000,
+      },
+      headers,
+    ),
+    ["keys"],
+  )) as any;
+  assert.equal(created.maxRequests, null);
+  const keys = await collection("apiKeys");
+  await keys.updateOne({ _id: created.id }, { $set: { requests: 10_000_000 } });
+  const integration = request("v1/files", "GET", undefined, {
+    Authorization: `Bearer ${created.secret}`,
+  });
+  await Promise.all([
+    authenticate(integration, "files:read"),
+    authenticate(integration, "files:read"),
+  ]);
+  assert.equal((await keys.findOne({ _id: created.id }))!.requests, 10_000_002);
+  await assert.rejects(authenticate(integration, "files:upload"), status(401));
+  await keys.updateOne({ _id: created.id }, { $unset: { maxRequests: 1 } });
+  await assert.rejects(authenticate(integration, "files:read"), status(401));
+  await keys.updateOne(
+    { _id: created.id },
+    { $set: { maxRequests: null, expiresAt: new Date(0) } },
+  );
+  await assert.rejects(authenticate(integration, "files:read"), status(401));
+  await keys.updateOne({ _id: created.id }, { $set: { expiresAt: null } });
+  await dispatch(request(`keys/${created.id}`, "DELETE", undefined, headers), [
+    "keys",
+    created.id,
+  ]);
+  await assert.rejects(authenticate(integration, "files:read"), status(401));
+});
+
 function binaryRequest(
   id: string,
   headers: Record<string, string>,
@@ -1639,7 +1686,11 @@ function multipart(
   for (const [name, value] of Object.entries(fields)) form.append(name, value);
   return new Request(`${origin}/api/v1/upload`, {
     method: "POST",
-    headers: { Origin: origin, ...headers },
+    headers: {
+      Origin: origin,
+      "Content-Length": String(Buffer.byteLength(bytes) * count + 1024),
+      ...headers,
+    },
     body: form,
   });
 }
@@ -1660,7 +1711,8 @@ test("one-call upload returns only URL, name and actual size with no pending rec
   const file = await (await collection("files")).findOne({ workspaceId });
   assert.equal(file!.visibility, "public");
   assert.ok(file!.folderId);
-  assert.equal(s3.commandCalls(DeleteObjectCommand).length, 1);
+  assert.equal(s3.commandCalls(DeleteObjectCommand).length, 0);
+  assert.equal(s3.commandCalls(CopyObjectCommand).length, 0);
 });
 test("one-call upload retries reuse the result and reject changed contents", async () => {
   const { headers } = await setup();
@@ -1824,4 +1876,61 @@ test("single-call streams files across R2 multipart parts", async () => {
   assert.equal(s3.commandCalls(UploadPartCommand).length, 2);
   assert.equal(s3.commandCalls(CompleteMultipartUploadCommand).length, 1);
   assert.equal(await (await collection("uploads")).countDocuments(), 0);
+});
+
+test("new keys can use the R2 size ceiling with disk-backed multipart uploads", async () => {
+  const { headers } = await setup();
+  mockStorage();
+  const created = (await dispatch(
+    request(
+      "keys",
+      "POST",
+      {
+        name: "Large file integration",
+        scopes: ["files:upload"],
+        expiresInDays: 30,
+        maxRequests: null,
+      },
+      headers,
+    ),
+    ["keys"],
+  )) as any;
+  assert.equal(created.maxUploadBytes, null);
+
+  const partLengths: number[] = [];
+  s3.on(CreateMultipartUploadCommand).resolves({ UploadId: "disk-parts" });
+  s3.on(UploadPartCommand).callsFake(async (input) => {
+    let length = 0;
+    for await (const chunk of input.Body as AsyncIterable<Buffer>) {
+      length += chunk.length;
+    }
+    assert.equal(length, input.ContentLength);
+    partLengths.push(length);
+    return { ETag: '"disk-part"' };
+  });
+  s3.on(CompleteMultipartUploadCommand).resolves({ ETag: '"complete"' });
+  const bytes = "a".repeat(6 * 1024 * 1024);
+  s3.on(HeadObjectCommand).resolves({
+    ContentLength: bytes.length,
+    ContentType: "image/jpeg",
+    ETag: '"complete"',
+  });
+
+  // Simulate the part planning for a large request without allocating its entire body.
+  const declaredLength = 5 * 1024 * 1024 * 10_000 + 10_000;
+  const response = (await dispatch(
+    multipart(
+      {
+        Authorization: `Bearer ${created.secret}`,
+        "Content-Length": String(declaredLength),
+      },
+      {},
+      bytes,
+    ),
+    ["v1", "upload"],
+  )) as Response;
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).size, bytes.length);
+  assert.deepEqual(partLengths, [5 * 1024 * 1024 + 1, 1024 * 1024 - 1]);
+  assert.equal(s3.commandCalls(CopyObjectCommand).length, 0);
 });

@@ -88,7 +88,7 @@ function publicKey(k: any) {
     expiresAt: k.expiresAt,
     requests: k.requests,
     maxRequests: k.maxRequests,
-    maxUploadBytes: k.maxUploadBytes,
+    maxUploadBytes: k.maxUploadBytes ?? null,
     lastUsedAt: k.lastUsedAt,
     revokedAt: k.revokedAt,
     createdAt: k.createdAt,
@@ -361,12 +361,14 @@ export async function dispatch(req: Request, path: string[]) {
           name: z.string().trim().min(1).max(80),
           scopes: z.array(z.enum(scopes)).min(1).max(3),
           expiresInDays: z.number().int().min(1).max(365).nullable(),
-          maxRequests: z.number().int().min(1).max(10000000),
+          maxRequests: z.number().int().min(1).max(10000000).nullable(),
           maxUploadBytes: z
             .number()
             .int()
             .min(1)
-            .max(Number(process.env.MAX_UPLOAD_BYTES || 104857600)),
+            .max(Number(process.env.MAX_UPLOAD_BYTES || 104857600))
+            .nullable()
+            .default(null),
         })
         .parse(await json(req));
       const secret = `acdn_${token()}`;

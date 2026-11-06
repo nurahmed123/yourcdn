@@ -85,7 +85,7 @@ Legacy records from the original single-workspace prototype without workspaceId 
 
 ## Upload relay and updating storage
 
-The browser uses the authenticated same-origin upload relay for small files and can retry through it when direct R2 uploads fail. File bodies stream to R2 without being buffered into a full in-memory file. The relay checks issuer, workspace, declared length/type, actual bytes and reservation state. It does not bypass file verification or publication controls. Vercel defaults to a 4 MiB relay cap due to platform request limits; other Node hosts use MAX_UPLOAD_BYTES. Set MAX_PROXY_UPLOAD_BYTES when your host needs a lower cap. Direct uploads still require the bucket's CORS policy.
+Dashboard uploads use the authenticated single-call endpoint and stream to the workspace's private R2 bucket. The legacy reservation endpoints still offer a same-origin relay and direct signed URLs. Legacy relay limits follow `MAX_UPLOAD_BYTES` and `MAX_PROXY_UPLOAD_BYTES`; direct signed uploads require bucket CORS. See [the API contract](docs/API.md) for both flows.
 
 Workspace owners have a separate `/workspace/storage` page for changing R2 account, bucket and access keys. Changes require the current account password, a verified storage connection and an email OTP. Previous credentials remain encrypted in `storageConnections`, uniquely identified by workspaceId/version. Each file and upload reservation pins its original version. Switching to another bucket preserves old files through the old connection; it does not migrate them. Keep the old bucket and credentials available. Rotating keys on the same bucket automatically uses the new keys for existing files.
 
@@ -102,3 +102,7 @@ Use `POST /api/v1/upload` with a scoped Bearer key and multipart `file`. Optiona
 ## Public page and search visibility
 
 `/about` is the public YourCDN product page. Set `APP_URL` to your deployed HTTPS origin before building. The public page then publishes its canonical URL and social preview, and `/sitemap.xml` lists that page. Login, signup, invitations, and workspace pages retain `noindex`. A local or unset origin disables indexing and produces an empty sitemap.
+
+### Large files on a VPS
+
+New dashboard API keys do not impose a file-size cap. The one-call endpoint defaults to R2's multipart object ceiling on a self-hosted VPS; use the included production server (`npm start`) and a proxy that streams uploads without buffering the entire request. The VPS workflow configures this for Nginx. Large or unknown-length uploads may use up to approximately 525 MiB of temporary disk per transfer. Hosting, network, and storage limits still apply; existing keys with an explicit size cap keep it. The legacy reservation endpoints retain their separate limits.

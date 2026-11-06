@@ -83,8 +83,7 @@ type ApiKey = {
   scopes: string[];
   expiresAt: string | null;
   requests: number;
-  maxRequests: number;
-  maxUploadBytes: number;
+  maxRequests: number | null;
   revokedAt: string | null;
   createdAt: string;
 };
@@ -205,6 +204,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
     [drag, setDrag] = useState(false),
     [keyOpen, setKeyOpen] = useState(false),
     [keySecret, setKeySecret] = useState(""),
+    [unlimitedRequests, setUnlimitedRequests] = useState(false),
     [inviteOpen, setInviteOpen] = useState(false),
     [keyScopes, setKeyScopes] = useState<string[]>([
       "files:read",
@@ -473,8 +473,9 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
           scopes: keyScopes,
           expiresInDays:
             form.get("days") === "never" ? null : Number(form.get("days")),
-          maxRequests: Number(form.get("requests")),
-          maxUploadBytes: Number(form.get("mb")) * 1048576,
+          maxRequests: form.has("unlimitedRequests")
+            ? null
+            : Number(form.get("requests")),
         }),
       });
       setKeySecret(result.secret);
@@ -786,6 +787,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                   onClick={() => {
                     if (requireUser()) {
                       setKeySecret("");
+                      setUnlimitedRequests(false);
                       setKeyOpen(true);
                     }
                   }}
@@ -976,9 +978,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                           <span key={f.id}>
                             <ChevronRight size={13} />
                             <button
-                              onClick={() =>
-                                push(`/files?folder=${f.id}`)
-                              }
+                              onClick={() => push(`/files?folder=${f.id}`)}
                             >
                               {f.name}
                             </button>
@@ -1096,9 +1096,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                           <div className="folder-card" key={f.id}>
                             <button
                               className="folder-open"
-                              onClick={() =>
-                                push(`/files?folder=${f.id}`)
-                              }
+                              onClick={() => push(`/files?folder=${f.id}`)}
                             >
                               <FolderOpen size={24} />
                               <strong>{f.name}</strong>
@@ -1548,6 +1546,7 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                     onClick={() => {
                       if (requireUser()) {
                         setKeySecret("");
+                        setUnlimitedRequests(false);
                         setKeyOpen(true);
                       }
                     }}
@@ -1589,19 +1588,22 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                           </td>
                           <td>
                             {k.requests.toLocaleString()} /{" "}
-                            {k.maxRequests.toLocaleString()}
+                            {k.maxRequests === null
+                              ? "Unlimited"
+                              : k.maxRequests.toLocaleString()}
                           </td>
                           <td>{k.expiresAt ? date(k.expiresAt) : "Never"}</td>
                           <td>
                             <span
-                              className={`badge ${k.revokedAt || (k.expiresAt !== null && new Date(k.expiresAt) < new Date()) || k.requests >= k.maxRequests ? "neutral" : "success"}`}
+                              className={`badge ${k.revokedAt || (k.expiresAt !== null && new Date(k.expiresAt) < new Date()) || (k.maxRequests !== null && k.requests >= k.maxRequests) ? "neutral" : "success"}`}
                             >
                               {k.revokedAt
                                 ? "Revoked"
                                 : k.expiresAt !== null &&
                                     new Date(k.expiresAt) < new Date()
                                   ? "Expired"
-                                  : k.requests >= k.maxRequests
+                                  : k.maxRequests !== null &&
+                                      k.requests >= k.maxRequests
                                     ? "Exhausted"
                                     : "Active"}
                             </span>
@@ -2105,20 +2107,24 @@ export default function Workspace({ initialUser }: { initialUser: User }) {
                     min="1"
                     max="10000000"
                     defaultValue="10000"
+                    disabled={unlimitedRequests}
                     required
                   />
                 </label>
               </div>
-              <label>
-                Maximum file size (MB)
+              <label className="permission-option">
                 <input
-                  name="mb"
-                  type="number"
-                  min="1"
-                  max="100"
-                  defaultValue="100"
-                  required
+                  type="checkbox"
+                  name="unlimitedRequests"
+                  checked={unlimitedRequests}
+                  onChange={(e) => setUnlimitedRequests(e.target.checked)}
                 />
+                <span>
+                  <strong>Unlimited requests</strong>
+                  <small>
+                    No lifetime request cap. Upload rate limits still apply.
+                  </small>
+                </span>
               </label>
               <button
                 className="button primary full"

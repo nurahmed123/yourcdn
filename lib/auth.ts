@@ -101,7 +101,17 @@ export async function authenticate(
         revokedAt: null,
         ...keyExpiryFilter(),
         scopes: scope,
-        $expr: { $lt: ["$requests", "$maxRequests"] },
+        $expr: {
+          $or: [
+            { $eq: [{ $type: "$maxRequests" }, "null"] },
+            {
+              $and: [
+                { $isNumber: "$maxRequests" },
+                { $lt: ["$requests", "$maxRequests"] },
+              ],
+            },
+          ],
+        },
       },
       { $inc: { requests: 1 }, $set: { lastUsedAt: new Date() } },
       { returnDocument: "after" },
@@ -151,7 +161,9 @@ export async function authenticate(
     ...who,
     workspaceId: workspace._id,
     role: membership.role,
-    ...(key ? { keyId: key._id, maxUploadBytes: key.maxUploadBytes } : {}),
+    ...(key
+      ? { keyId: key._id, maxUploadBytes: key.maxUploadBytes ?? undefined }
+      : {}),
   };
 }
 export function admin(p: Principal) {

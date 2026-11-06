@@ -1,3 +1,5 @@
+import { spoolUpload } from "./large-upload";
+import { R2_MIN_PART_BYTES } from "./upload-policy";
 import { Upload } from "@aws-sdk/lib-storage";
 import type { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -33,12 +35,23 @@ export function storageFor(c: R2Credentials) {
       type: string,
       body: Readable,
       signal: AbortSignal,
+      name: string,
+      partSize: number,
     ) {
+      const params = {
+        Bucket: c.bucket,
+        Key: key,
+        ContentType: type,
+        ContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+        CacheControl: "private, no-store",
+      };
+      if (partSize > R2_MIN_PART_BYTES)
+        return spoolUpload(s3, params, body, partSize, signal);
       const upload = new Upload({
         client: s3,
-        params: { Bucket: c.bucket, Key: key, Body: body, ContentType: type },
+        params: { ...params, Body: body },
         queueSize: 2,
-        partSize: 5 * 1024 * 1024,
+        partSize,
         leavePartsOnError: false,
       });
       const abort = () => {

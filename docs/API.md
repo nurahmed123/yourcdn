@@ -25,7 +25,7 @@ Success: **201**, exactly these fields (size in bytes):
 
 Optional multipart fields: `visibility` (private default, or public), `folderPath` or `folderId` (mutually exclusive), `requestId` (UUID). Alternatively send `Idempotency-Key: UUID`; if both IDs are provided they must match. Retrying the same file and options with the same ID returns the original response with **200**. Different content/options with that ID returns **409**. IDs are scoped to workspace, user and API key. All upload attempts count against request limits. Legacy multi-step endpoints remain compatible.
 
-File size is counted from streamed bytes and capped by API key and server limits. Default Node cap: 100 MiB. Vercel: 4 MiB file cap (allowing multipart overhead under its request body limit). Configure `MAX_PROXY_UPLOAD_BYTES` within your hosting limit. Empty files, extra files, unknown/duplicate fields, malformed bodies, and invalid destination folders are rejected. Stream buffers are bounded; failed R2 multipart transfers are aborted and staging objects removed on handled errors. Configure an R2 lifecycle rule to remove old `staging/` objects and incomplete multipart uploads after one day to cover process crashes or storage outages.
+File size is counted from streamed bytes. New keys created in the dashboard have no key-specific size cap; explicit size limits on existing keys or API-created keys still apply. The default self-hosted single-call ceiling is the Cloudflare R2 multipart object limit (5 TiB minus 5 GiB). Hosting limits still apply: Vercel caps this endpoint at 4 MiB, and operators can lower the cap with `MAX_PROXY_UPLOAD_BYTES`. Use `npm start` and configure the reverse proxy to stream request bodies for large files. Large multipart parts use temporary disk space (up to about 525 MiB per in-flight upload). The app publishes metadata only after verifying the object in the private bucket. Failed requests clean up their uncommitted objects and abort multipart transfers on handled errors. Set an R2 lifecycle rule to abort incomplete multipart uploads after one day to cover process crashes.
 
 Use `XMLHttpRequest.upload.onprogress` for real client transfer percentage, then show **Processing** until the final JSON response arrives. Transfer progress measures bytes sent from the client, not final R2 verification. `/docs` includes animated progress, a real authenticated upload demo, browser code, and a streaming server forwarding example. Keep Bearer credentials on your own authenticated backend, not in browser JavaScript. Browser code calls that backend once; it forwards one multipart stream to YourCDN.
 
@@ -74,11 +74,11 @@ Workspace session members share workspace files according to role. API keys addi
 ## API keys
 
 - `GET /api/keys` — list current user’s keys in active workspace; no raw key/hash returned.
-- `POST /api/keys` — name, scopes, expiresInDays (1–365, or null for Never), maxRequests, maxUploadBytes. Editor/admin/owner session. Secret returned once.
+- `POST /api/keys` — name, scopes, expiresInDays (1–365, or null for Never), maxRequests (1–10,000,000, or null for Unlimited), optional maxUploadBytes (omit or null for no per-key cap). Editor/admin/owner session. Secret returned once.
 - `DELETE /api/keys/:id` — revokes own key in active workspace.
 - `GET /api/stats`, `GET /api/activity` — verified workspace session; all queries scoped by workspaceId.
 
-All key requests count toward maxRequests, including downstream rejections. Membership is rechecked every request. Removed members lose API access even if a key has not expired. Browser-to-application requests are same-origin; keep API keys in external applications’ backends.
+All key requests are counted, including downstream rejections. Set `maxRequests: null` to remove the lifetime request cap; expiry, permissions, revocation, and upload rate limits still apply. Membership is rechecked every request. Removed members lose API access even if a key has not expired. Browser-to-application requests are same-origin; keep API keys in external applications’ backends.
 
 Folder names reject slashes, control characters, `.` and `..`. Hierarchy is limited to 31 levels. File URLs and physical R2 keys are immutable; folders are MongoDB-backed logical containers, so renaming/moving assets does not break delivery URLs. Each bucket must remain private. Configure its exact application origin in R2 CORS and a lifecycle cleanup for staging/.
 

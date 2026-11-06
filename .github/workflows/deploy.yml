@@ -158,6 +158,7 @@ jobs:
               else
                 echo "SSL certificate for $DOMAIN already exists, skipping."
               fi
+              bash scripts/configure-upload-proxy.sh "$DOMAIN" "$PORT"
             fi
 
             echo "Deployment successful."

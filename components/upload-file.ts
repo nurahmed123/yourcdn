@@ -31,8 +31,6 @@ export function uploadFile(
     };
     xhr.onerror = () =>
       reject(new Error("Upload interrupted. Check your connection and retry."));
-    xhr.timeout = 600000;
-    xhr.ontimeout = () => reject(new Error("Upload timed out. Please retry."));
     const form = new FormData();
     form.append("file", file);
     form.append("visibility", options.visibility || "private");

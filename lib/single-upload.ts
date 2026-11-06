@@ -8,7 +8,11 @@ import { ApiError, cleanName, hash, required } from "./security";
 import { workspaceStorage } from "./workspaces";
 import { resolveFolder } from "./folders";
 import { uploadOwner } from "./uploads";
-import { proxyUploadLimit } from "./upload-policy";
+import {
+  R2_MAX_PARTS,
+  R2_MIN_PART_BYTES,
+  singleUploadLimit,
+} from "./upload-policy";
 
 const fieldsSchema = z
   .object({
@@ -22,14 +26,21 @@ const fieldsSchema = z
 export async function singleUpload(req: Request) {
   const p = await authenticate(req, "files:upload");
   await limit(`uploads:${p.keyId || p.userId}`, 100, 3600);
-  const maximum = Math.min(proxyUploadLimit(), p.maxUploadBytes || Infinity);
+  const maximum = Math.min(singleUploadLimit(), p.maxUploadBytes ?? Infinity);
   if (
     !req.body ||
     !req.headers.get("content-type")?.startsWith("multipart/form-data")
   )
     throw new ApiError(415, "Send multipart/form-data with one file field.");
-  if (Number(req.headers.get("content-length") || 0) > maximum + 65536)
+  const requestLength = Number(req.headers.get("content-length"));
+  if (requestLength > maximum + 65536)
     throw new ApiError(413, "File exceeds the upload size limit.");
+  const upperBound =
+    requestLength > 0 ? Math.min(maximum, requestLength) : maximum;
+  const partSize = Math.max(
+    R2_MIN_PART_BYTES,
+    Math.ceil(upperBound / R2_MAX_PARTS),
+  );
   let parser: ReturnType<typeof Busboy>;
   try {
     parser = Busboy({
@@ -49,7 +60,6 @@ export async function singleUpload(req: Request) {
   }
   const storage = await workspaceStorage(p.workspaceId);
   const id = randomUUID();
-  const staging = `staging/${id}`;
   let finalKey: string | undefined;
   let committed = false;
   let size = 0,
@@ -79,6 +89,8 @@ export async function singleUpload(req: Request) {
       );
     });
   parser.on("file", (field, stream, info) => {
+    // A malformed request can end while the disk-backed uploader is opening its spool.
+    stream.on("error", () => undefined);
     if (field !== "file" || task) {
       failure = new ApiError(400, "Use exactly one file field named file.");
       stream.resume();
@@ -86,6 +98,7 @@ export async function singleUpload(req: Request) {
     }
     name = cleanName(info.filename || "file");
     contentType = info.mimeType;
+    finalKey = `files/${id}/${randomUUID()}/${name}`;
     stream.on("limit", () => {
       failure = new ApiError(413, "File exceeds the upload size limit.");
       source.destroy(failure as Error);
@@ -108,7 +121,7 @@ export async function singleUpload(req: Request) {
       })(),
     );
     task = storage
-      .putStream(staging, contentType, body, req.signal)
+      .putStream(finalKey, contentType, body, req.signal, name, partSize)
       .catch((error) => {
         failure ||=
           error instanceof ApiError
@@ -137,7 +150,8 @@ export async function singleUpload(req: Request) {
     });
     await task;
     if (failure) throw failure;
-    if (!task || !size) throw new ApiError(400, "Choose a non-empty file.");
+    if (!task || !size || !finalKey)
+      throw new ApiError(400, "Choose a non-empty file.");
     const b = fieldsSchema.parse(fields);
     const headerId = req.headers.get("idempotency-key");
     if (headerId && b.requestId && headerId !== b.requestId)
@@ -176,17 +190,12 @@ export async function singleUpload(req: Request) {
     });
     if (existing) return response(existing, 200);
     const folderId = await resolveFolder(p, b);
-    const object = await storage.head(staging);
+    const object = await storage.head(finalKey);
     if (
       object.ContentLength !== size ||
       object.ContentType !== contentType ||
       !object.ETag
     )
-      throw new ApiError(400, "Stored file verification failed. Please retry.");
-    finalKey = `files/${id}/${randomUUID()}/${name}`;
-    await storage.promote(staging, finalKey, name, contentType, object.ETag);
-    const copied = await storage.head(finalKey);
-    if (copied.ContentLength !== size || copied.ContentType !== contentType)
       throw new ApiError(400, "Stored file verification failed. Please retry.");
     const file = {
       _id: id,
@@ -227,7 +236,6 @@ export async function singleUpload(req: Request) {
     source.destroy();
     parser.destroy();
     await task;
-    await storage.remove(staging).catch(() => undefined);
     if (finalKey && !committed)
       await storage.remove(finalKey).catch(() => undefined);
   }
