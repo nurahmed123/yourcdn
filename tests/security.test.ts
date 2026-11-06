@@ -7,6 +7,8 @@ import { workspaceStorage } from "../lib/workspaces";
 import { before, beforeEach, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { mockClient } from "aws-sdk-client-mock";
 import {
@@ -199,7 +201,7 @@ function mockStorage() {
   });
 }
 before(async () => {
-  process.env.MONGOMS_DOWNLOAD_DIR = "/private/tmp/arionys-mongodb-binaries";
+  process.env.MONGOMS_DOWNLOAD_DIR ??= join(tmpdir(), "yourcdn-mongodb-binaries");
   mongo = await MongoMemoryServer.create();
   Object.assign(process.env, {
     MONGODB_URI: mongo.getUri(),
